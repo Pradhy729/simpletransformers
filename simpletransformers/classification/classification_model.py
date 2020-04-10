@@ -292,7 +292,7 @@ class ClassificationModel:
         """
 
         device = self.device
-        model = self.model
+        model = torch.nn.DataParallel(self.model)
         args = self.args
 
         tb_writer = SummaryWriter(logdir=args["tensorboard_dir"])
