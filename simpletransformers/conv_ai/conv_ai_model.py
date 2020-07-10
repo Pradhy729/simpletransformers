@@ -14,6 +14,7 @@ import warnings
 from collections import defaultdict
 from itertools import chain
 from multiprocessing import cpu_count
+from dataclasses import asdict
 
 import numpy as np
 from scipy.stats import mode, pearsonr
@@ -155,14 +156,14 @@ class ConvAIModel:
         Trains the model using 'train_file'
 
         Args:
-            train_file: Path to a JSON file containing the training data. 
+            train_file: Path to a JSON file containing the training data.
                 If not given, train dataset from PERSONA-CHAT will be used.
             output_dir: The directory where model files will be saved. If not given, self.args.output_dir will be used.
             show_running_loss (optional): Set to False to prevent running loss from being printed to console. Defaults to True.
             args (optional): Optional changes to the args dict of the model. Any changes made will persist for the model.
             eval_file (optional): Evaluation data against which evaluation will be performed when evaluate_during_training is enabled.
                 If not given when evaluate_during_training is enabled, the evaluation data from PERSONA-CHAT will be used.
-            **kwargs: 
+            **kwargs:
         Returns:
             None
         """  # noqa: ignore flake8"
@@ -230,16 +231,58 @@ class ConvAIModel:
         t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
 
         no_decay = ["bias", "LayerNorm.weight"]
-        optimizer_grouped_parameters = [
-            {
-                "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
-                "weight_decay": args.weight_decay,
-            },
-            {
-                "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
-                "weight_decay": 0.0,
-            },
-        ]
+
+        optimizer_grouped_parameters = []
+        custom_parameter_names = set()
+        for group in self.args.custom_parameter_groups:
+            params = group.pop("params")
+            custom_parameter_names.update(params)
+            param_group = {**group}
+            param_group["params"] = [p for n, p in model.named_parameters() if n in params]
+            optimizer_grouped_parameters.append(param_group)
+
+        for group in self.args.custom_layer_parameters:
+            layer_number = group.pop("layer")
+            layer = f"layer.{layer_number}."
+            group_d = {**group}
+            group_nd = {**group}
+            group_nd["weight_decay"] = 0.0
+            params_d = []
+            params_nd = []
+            for n, p in model.named_parameters():
+                if n not in custom_parameter_names and layer in n:
+                    if any(nd in n for nd in no_decay):
+                        params_nd.append(p)
+                    else:
+                        params_d.append(p)
+                    custom_parameter_names.add(n)
+            group_d["params"] = params_d
+            group_nd["params"] = params_nd
+
+            optimizer_grouped_parameters.append(group_d)
+            optimizer_grouped_parameters.append(group_nd)
+
+        if not self.args.train_custom_parameters_only:
+            optimizer_grouped_parameters.extend(
+                [
+                    {
+                        "params": [
+                            p
+                            for n, p in model.named_parameters()
+                            if n not in custom_parameter_names and not any(nd in n for nd in no_decay)
+                        ],
+                        "weight_decay": args.weight_decay,
+                    },
+                    {
+                        "params": [
+                            p
+                            for n, p in model.named_parameters()
+                            if n not in custom_parameter_names and any(nd in n for nd in no_decay)
+                        ],
+                        "weight_decay": 0.0,
+                    },
+                ]
+            )
 
         warmup_steps = math.ceil(t_total * args.warmup_ratio)
         args.warmup_steps = warmup_steps if args.warmup_steps == 0 else args.warmup_steps
@@ -272,15 +315,19 @@ class ConvAIModel:
             training_progress_scores = self._create_training_progress_scores(**kwargs)
 
         if args.wandb_project:
-            wandb.init(project=args.wandb_project, config={**args}, **args.wandb_kwargs)
+            wandb.init(project=args.wandb_project, config={**asdict(args)}, **args.wandb_kwargs)
             wandb.watch(self.model)
 
         model.train()
         for _ in train_iterator:
             train_iterator.set_description(f"Epoch {epoch_number + 1} of {args.num_train_epochs}")
-            for step, batch in enumerate(
-                tqdm(train_dataloader, desc=f"Running Epoch {epoch_number}", disable=args.silent)
-            ):
+            batch_iterator = tqdm(
+                train_dataloader,
+                desc=f"Running Epoch {epoch_number} of {args.num_train_epochs}",
+                disable=args.silent,
+                mininterval=0,
+            )
+            for step, batch in enumerate(batch_iterator):
                 batch = tuple(t.to(device) for t in batch)
                 input_ids, mc_token_ids, lm_labels, mc_labels, token_type_ids = batch
 
@@ -469,7 +516,7 @@ class ConvAIModel:
         Evaluates the model on eval_file. Saves results to output_dir.
 
         Args:
-            eval_file: Path to a JSON file containing the evaluation data. 
+            eval_file: Path to a JSON file containing the evaluation data.
                 If not given, eval dataset from PERSONA-CHAT will be used.
             output_dir: The directory where model files will be saved. If not given, self.args.output_dir will be used.
             verbose: If verbose, results will be printed to the console on completion of evaluation.
@@ -568,7 +615,8 @@ class ConvAIModel:
         if not no_cache:
             no_cache = args.no_cache
 
-        os.makedirs(self.args.cache_dir, exist_ok=True)
+        if not no_cache:
+            os.makedirs(self.args.cache_dir, exist_ok=True)
 
         dataset_path = dataset_path if dataset_path else ""
 
@@ -914,3 +962,6 @@ class ConvAIModel:
         args = ConvAIArgs()
         args.load(input_dir)
         return args
+
+    def get_named_parameters(self):
+        return [n for n, p in self.model.named_parameters()]
