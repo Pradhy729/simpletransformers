@@ -1,6 +1,6 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![Downloads](https://pepy.tech/badge/simpletransformers)](https://pepy.tech/project/simpletransformers)
 <!-- ALL-CONTRIBUTORS-BADGE:START - Do not remove or modify this section -->
-[![All Contributors](https://img.shields.io/badge/all_contributors-43-orange.svg?style=flat-square)](#contributors-)
+[![All Contributors](https://img.shields.io/badge/all_contributors-44-orange.svg?style=flat-square)](#contributors-)
 <!-- ALL-CONTRIBUTORS-BADGE:END -->
 
 # Simple Transformers
@@ -18,6 +18,7 @@ Supports
 - Seq2Seq Tasks
 - Multi-Modal Classification
 - Conversational AI.
+- Text Representation Generation.
 
 
 ### Documentation Updates
@@ -208,8 +209,11 @@ Any feedback will be immensely helpful in improving the documentation! If you ha
     - [Training a Model](#training-a-model)
     - [Evaluating a Model](#evaluating-a-model)
     - [Predicting from a trained Model](#predicting-from-a-trained-model)
+  - [Text Representation Generation](#text-representation-generation)
+       - [Minimal example for generating word embeddings](#minimal-start-for-generating-word-embeddings)
+       - [Minimal example for generating sentence embeddings](#minimal-start-for-generating-sentence-embeddings)
   - [Regression](#regression)
-      - [Minimal Start for Regression](#minimal-start-for-regression)
+    - [Minimal Start for Regression](#minimal-start-for-regression)
   - [Visualization Support](#visualization-support)
   - [Experimental Features](#experimental-features)
     - [Sliding Window For Long Sequences](#sliding-window-for-long-sequences)
@@ -2919,6 +2923,46 @@ _[Back to Table of Contents](#table-of-contents)_
 
 ---
 
+## [Text Representation Generation](#text-representation-generation)
+       
+Use transformers language models to generate contextual word or sentence representations from text that you can then feed to any down-stream tasks of your preference.  
+For more complete examples of how to use this component with downstream tasks refer to: https://github.com/ThilinaRajapakse/simpletransformers/tree/master/examples/language_representation 
+       
+### Minimal example for generating word embeddings
+Generate a list of contextual word embeddings for every sentence in a list
+```python
+from simpletransformers.language_representation import RepresentationModel
+        
+sentences = ["Example sentence 1", "Example sentence 2"]
+model = RepresentationModel(
+        model_type="bert",
+        model_name="bert-base-uncased",
+        use_cuda=False
+    )
+word_vectors = model.encode_sentences(sentences, combine_strategy=None)
+assert word_vectors.shape === (2, 5, 768) # token vector for every token in each sentence, bert based models add 2 tokens per sentence by default([CLS] & [SEP])
+```
+       
+### Minimal example for generating sentence embeddings 
+Same code as for generating word embeddings, the only differennce is that we pass combine_s`trategy="mean" parameter to `combine_strategy="mean"
+```python
+from simpletransformers.language_representation import RepresentationModel
+sentences = ["Example sentence 1", "Example sentence 2"]
+model = RepresentationModel(
+        model_type="bert",
+        model_name="bert-base-uncased",
+        use_cuda=False
+    )
+word_vectors = model.encode_sentences(sentences, combine_strategy="mean")
+assert word_vectors.shape === (2, 768) # one sentence embedding per sentence
+```
+
+
+_[Back to Table of Contents](#table-of-contents)_
+
+
+---
+
 ## Regression
 
 Regression tasks also use the ClassificationModel with 2 caveats.
@@ -3346,6 +3390,7 @@ Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/d
   </tr>
   <tr>
     <td align="center"><a href="https://github.com/taranais"><img src="https://avatars1.githubusercontent.com/u/859916?v=4" width="100px;" alt=""/><br /><sub><b>taranais</b></sub></a><br /><a href="https://github.com/ThilinaRajapakse/simpletransformers/commits?author=taranais" title="Code">💻</a></td>
+    <td align="center"><a href="http://pablomarino.me"><img src="https://avatars1.githubusercontent.com/u/14850762?v=4" width="100px;" alt=""/><br /><sub><b>Pablo N. Marino</b></sub></a><br /><a href="https://github.com/ThilinaRajapakse/simpletransformers/commits?author=pablonm3" title="Code">💻</a></td>
   </tr>
 </table>
 
